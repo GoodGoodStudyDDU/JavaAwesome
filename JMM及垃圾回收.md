@@ -1,7 +1,7 @@
-1. 内存模型
+### 1. 内存模型^[深入理解java虚拟机——JVM高级特性与最佳实践]
 JVM内存区域分为以下几个部分:
 * 堆
-  对象分配基本都在该区域上
+  对象分配基本都在该区域上（逃逸分析除外）
 * 方法区
   主要用于存放类文件，静态变量，常量，即时编译后的代码等
 * 虚拟机栈
@@ -17,4 +17,33 @@ JVM内存区域分为以下几个部分:
 
 
 
-2. 垃圾回收
+### 2. 垃圾回收
+现代垃圾回收基本采用分代回收机制，一般分为新生代和老年代，方法区一般称为永久代（PermGen，jdk8已改用Metaspace）。
+其中，新生代又分为几个区域： Eden\*1,Survivor\*2，Eden与Survivor比例默认为8:1。
+
+> Q: 为什么有两个Survivor？
+> A: 新生代一般采用复制算法，当Eden\*1+Survivor\*1满了，就将存活的对象放到另一个Survivor中，然后清理前面两个区域。
+
+> Q: 如何对已经没有被使用的对象进行标记？
+> A: 采用可达性分析算法，将对象之间的引用看作是图结构，起始节点称作"GC Roots"，如果某个对象通过"GC Roots"不可达，那么说明该对象不可用，可以被回收。可以作为"GC Roots"的对象有以下几种：1. 虚拟机栈中引用的对象；2. 方法区中类静态属性引用的对象；3. 方法区中常量引用的对象；4. Native方法引用的对象
+
+> Q: 为什么慎用finalize()
+> A: 若对象重写finalize()方法，则在回收时调用，且仅调用一次，虚拟机仅触发执行，并不会等待完成。若在finalize()方法中重新将对象引用加入到引用链中，下次回收时不会再调用finalize()。
+
+
+### 3. 垃圾收集器
+##### 3.1 Serial/Serial Old
+单线程收集器，新生代采用复制算法，老年代采用标记-整理算法，两个阶段都会进行"Stop The World"(STW，下同)，暂停所有用户线程。
+##### 3.2 ParNew
+Serial的多线程版本，用于新生代。
+##### 3.3 Parallel Scavenge
+新生代收集器，采用复制算法，最大的特点是可控吞吐量(吞吐量=运行用户代码时间/(运行用户代码时间+垃圾回收时间))，通过设置垃圾收集的最大时长(-XX:MaxGCPauseMillis)来控制，也可以直接设置吞吐量(-XX:GCTimeRatio)。
+##### 3.4 Parallel Old
+Parallel Scavenge的老年代版本，多线程标记整理算法。
+##### 3.5 CMS
+基于标记清除算法实现，整个过程分为四个步骤：1. 初始标记（STW）；2. 并发标记；3. 重新标记（STW）；4. 并发清除。该收集器有以下几个缺点： 1. 对CPU资源敏感；2. 无法处理浮动垃圾。这是由于在并发清除阶段，还有新的垃圾对象产生，只能下次回收。还可能出现"Concurrent Mode Failure"导致Full GC，因为用户线程还在运行，还会产生新的对象，这就导致需要预留空间，当预留空间（通过-XX:CMSInitiatingOccupancyFraction调整比例）无法满足需要时，引发"Concurrent Mode Failure"，则会启用Serial Old进行FGC。3. 基于标记清除，会产生碎片，可以在进行FGC时进行碎片整理(-XX:+UseCMSCompactAtFullCollection，默认开启)。
+##### 3.6 G1^[[Getting Started with the G1 Garbage Collector](https://www.oracle.com/technetwork/tutorials/tutorials-1876574.html)] ^[[译文-G1收集器](https://segmentfault.com/a/1190000007795862)]
+G1特点：并行与并发，分代收集，空间整合，可预测停顿。G1将Java堆分成了若干个大小相等的区域(Region)，根据每个区域回收价值的经验值，每次优先回收最有价值的区域。G1分为以下几个阶段：1. 初始标记(STW)；2. 根区域扫描；3. 并发标记；4. 重新标记(STW)；5. 并发清理(STW)。
+
+
+
