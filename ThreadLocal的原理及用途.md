@@ -39,9 +39,9 @@ public static void main(String[] args) throws InterruptedException {
     Thread t1 = new Thread(()->{
         System.out.println("t1 " + counter.get());
     });
-    t1.start();
-    semaphore.acquire();
     t0.start();
+    semaphore.acquire();
+    t1.start();
     while (t1.getState() != Thread.State.TERMINATED);
     System.out.println("main " + counter.get());
     System.out.println("finish");
