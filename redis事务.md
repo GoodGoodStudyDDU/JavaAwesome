@@ -1,0 +1,6 @@
+MULTI
+EXEC
+DISCARD
+WATCH
+
+集群环境下不可用
